@@ -14,18 +14,16 @@ from turtle import bgcolor
 
 class AlbinaGame:
     def __init__(self):
-        # Инициализация игры
         self.version = "Albina V1"
         self.running = True
         self.server_running = False
         self.game_loaded = False
         self.current_world = None
-        self.day_length = 60  # 60 секунд на игровой день
+        self.day_length = 60
         self.selected_item = None
         self.plugins = []
         self.mob_difficulty = 0
 
-        # Предметы в игре
         self.item_types = {
             "clothes": {
                 "ushanka": {"name": "Ushanka", "effect": {"sleep_rate": -0.2}, "rarity": 0.3},
@@ -49,7 +47,6 @@ class AlbinaGame:
             }
         }
 
-        # Мобы в игре
         self.mob_types = {
             "snake": {"name": "Snake", "hp": 5, "damage": 3, "rarity": 0.5},
             "rat": {"name": "Rat", "hp": 6, "damage": 2, "rarity": 0.4},
@@ -57,7 +54,6 @@ class AlbinaGame:
             "cockroach": {"name": "Cockroach", "hp": 1, "damage": 0, "rarity": 0.8}
         }
 
-        # Статистика игрока
         self.player = {
             "x": 0,
             "y": 0,
@@ -82,7 +78,6 @@ class AlbinaGame:
             "kick_damage": 2
         }
 
-        # Настройки мира
         self.world = {
             "seed": "",
             "layout": {},
@@ -91,46 +86,36 @@ class AlbinaGame:
             "discovered": {}
         }
 
-        # Инициализация GUI
         self.init_gui()
 
-        # Запуск сервера
         self.start_server()
 
-        # Основной игровой цикл
         self.game_loop()
         self.update_status_bar()
 
     def init_gui(self):
-        # Создание основного окна
         self.root = tk.Tk()
         self.root.configure(bg="#212121")
         self.root.title("Albina")
         self.root.geometry("800x600")
 
-        # Статус бар
         self.status_bar = tk.Label(self.root, text="", bd=1, relief=tk.SUNKEN, anchor=tk.W, bg="#212121", fg="#00ff00", font=("Consolas", 9, "bold"))
         self.status_bar.pack(fill=tk.X)
 
-        # Консоль вывода
         self.console = scrolledtext.ScrolledText(self.root, state='disabled')
         self.console.configure(bg="#212121", fg="#00ff00", insertbackground="#aeada7", font=("Consolas", 12, "bold"))
         self.console.pack(fill=tk.BOTH, expand=True)
 
-        # Фрейм для ввода команд
         self.input_frame = tk.Frame(self.root, bg="#212121")
         self.input_frame.pack(fill=tk.X)
 
-        # Метка ">"
-        self.prompt = tk.Label(self.input_frame, text=">", fg="#00ff00", bg="#212121")
+        self.prompt = tk.Label(self.input_frame, text=">", fg="#00ff00")
         self.prompt.pack(side=tk.LEFT)
 
-        # Поле ввода команд
         self.command_entry = tk.Entry(self.input_frame, bg="#212121", fg="#00ff00", insertbackground="#aeada7", font=("Consolas", 12, "bold"))
         self.command_entry.pack(fill=tk.X, expand=True, side=tk.LEFT)
         self.command_entry.bind("<Return>", self.process_command)
 
-        # Вывод начального сообщения
         self.print_to_console(self.version)
         self.root.after(2000, self.check_server)
 
@@ -149,7 +134,6 @@ class AlbinaGame:
         self.root.after(1000, self.update_status_bar)
 
     def check_server(self):
-        # Проверка и инициализация сервера
         if not os.path.exists("server"):
             os.makedirs("server")
             self.print_to_console("Created server directory")
@@ -159,7 +143,6 @@ class AlbinaGame:
                 json.dump({"port": 8080, "autosave": True}, f)
             self.print_to_console("Created default config file")
 
-        # Проверка папки plugins
         if not os.path.exists("plugins"):
             os.makedirs("plugins")
             self.print_to_console("Created plugins directory")
@@ -174,7 +157,6 @@ class AlbinaGame:
         self.print_to_console(f"> {command}")
 
         if not self.game_loaded:
-            # Команды главного меню
             if command.startswith("load"):
                 self.load_world(int(command.split()[1]))
             elif command.startswith("new"):
@@ -194,7 +176,6 @@ class AlbinaGame:
             else:
                 self.print_to_console("Unknown command. Type 'load' to start")
         else:
-            # Игровые команды
             if command in ["up", "down", "left", "right"]:
                 self.move_player(command)
             elif command == "inventory":
@@ -246,7 +227,6 @@ class AlbinaGame:
 
         self.print_to_console("Enter world number to load:")
 
-        # В реальной реализации нужно ожидать ввода пользователя
         self.load_specific_world(worlds[index - 1])
 
     def load_specific_world(self, world_name):
@@ -255,7 +235,6 @@ class AlbinaGame:
             self.print_to_console(f"World {world_name} not found")
             return
 
-        # Загрузка данных мира
         server_file = os.path.join(world_path, "server.alb")
         stat_file = os.path.join(world_path, "stat.alb")
 
@@ -265,13 +244,11 @@ class AlbinaGame:
                     world_data = json.load(f)
                     self.world.update(world_data)
 
-                    # Генерация мира на основе seed
                     self.generate_world()
 
                     self.current_world = world_name
                     self.game_loaded = True
 
-                    # Загрузка статистики игрока
                     if os.path.exists(stat_file):
                         with open(stat_file, "r") as f:
                             player_data = json.load(f)
@@ -280,7 +257,6 @@ class AlbinaGame:
                     self.print_to_console(f"World {world_name} loaded")
                     self.print_to_console("Use commands: up, down, left, right to move")
 
-                    # Проверка координат игрока
                     if abs(self.player["x"]) > 50000 or abs(self.player["y"]) > 50000:
                         self.game_over("You saw the light and came out. This is the end")
             except Exception as e:
@@ -289,19 +265,15 @@ class AlbinaGame:
             self.print_to_console("No world data found")
 
     def generate_world(self):
-        # Генерация мира на основе seed
         if not self.world["seed"]:
             self.world["seed"] = ''.join(random.choices('abcdefghijklmnopqrstuvwxyz0123456789', k=12))
 
         random.seed(hashlib.sha256(self.world["seed"].encode()).hexdigest())
 
-        # Простая генерация лабиринта
-        # В реальной реализации нужно сделать более сложную систему
         self.world["layout"] = {}
         self.world["items"] = []
         self.world["mobs"] = []
 
-        # Генерация предметов
         for _ in range(random.randint(20, 50)):
             item_type = random.choice(list(self.item_types.keys()))
             item_subtype = random.choice(list(self.item_types[item_type].keys()))
@@ -313,7 +285,6 @@ class AlbinaGame:
                     "y": random.randint(-100, 100)
                 })
 
-        # Генерация мобов
         for _ in range(random.randint(10, 30)):
             mob_type = random.choice(list(self.mob_types.keys()))
             if random.random() < self.mob_types[mob_type]["rarity"]:
@@ -347,10 +318,8 @@ class AlbinaGame:
             self.print_to_console(f"created world \"{name}\"")
 
     def move_player(self, direction):
-        # Сохраняем предыдущие координаты
         old_x, old_y = self.player["x"], self.player["y"]
 
-        # Обновляем координаты
         if direction == "up":
             self.player["y"] += 1
         elif direction == "down":
@@ -360,7 +329,6 @@ class AlbinaGame:
         elif direction == "right":
             self.player["x"] += 1
 
-        # Проверяем, не столкнулся ли игрок со стеной
         if self.check_wall_collision():
             self.player["x"], self.player["y"] = old_x, old_y
             self.print_to_console("Dead end")
@@ -368,25 +336,21 @@ class AlbinaGame:
             self.print_to_console(f"Moved {direction}")
             self.check_position()
 
-            # Проверка на увеличение сложности мобов
             if abs(self.player["x"]) > 100 + self.mob_difficulty * 100 or abs(self.player["y"]) > 100 + self.mob_difficulty * 100:
                 self.mob_difficulty += 1
                 self.print_to_console("You feel the darkness getting deeper...")
 
     def check_wall_collision(self):
-        # Проверка столкновения со стеной на основе seed
         pos_key = f"{self.player['x']},{self.player['y']}"
 
         if pos_key not in self.world["discovered"]:
-            # Генерация стены на основе seed и координат
             random.seed(hashlib.sha256((self.world["seed"] + pos_key).encode()).hexdigest())
-            is_wall = random.random() < 0.3  # 30% шанс стены
+            is_wall = random.random() < 0.3
             self.world["discovered"][pos_key] = {"wall": is_wall}
 
         return self.world["discovered"][pos_key]["wall"]
 
     def check_position(self):
-        # Проверка предметов в текущей позиции
         pos_items = [item for item in self.world["items"]
                     if item["x"] == self.player["x"] and item["y"] == self.player["y"]]
 
@@ -411,7 +375,6 @@ class AlbinaGame:
             else:
                 self.print_to_console("Inventory full! Can't pick up item")
 
-        # Проверка мобов в текущей позиции
         pos_mobs = [mob for mob in self.world["mobs"]
                    if mob["x"] == self.player["x"] and mob["y"] == self.player["y"]]
 
@@ -489,7 +452,6 @@ class AlbinaGame:
             self.print_to_console("You need a ping pong ball for that")
 
     def kick(self):
-        # Проверка мобов в текущей позиции
         pos_mobs = [mob for mob in self.world["mobs"]
                    if mob["x"] == self.player["x"] and mob["y"] == self.player["y"]]
 
@@ -500,29 +462,24 @@ class AlbinaGame:
         mob = pos_mobs[0]
         mob_data = self.mob_types[mob["type"]]
 
-        # Нанесение урона
         damage = self.player["kick_damage"] + self.mob_difficulty
         mob["hp"] -= damage
         self.print_to_console(f"You kicked {mob_data['name']} for {damage} damage")
 
-        # Проверка смерти моба
         if mob["hp"] <= 0:
             self.world["mobs"].remove(mob)
             self.player["exp"] += 5
             self.player["kick_damage"] += 1
 
-            # Запись убитого моба
             if mob["type"] not in self.player["killed_mobs"]:
                 self.player["killed_mobs"][mob["type"]] = 0
             self.player["killed_mobs"][mob["type"]] += 1
 
             self.print_to_console(f"{mob_data['name']} defeated! +5 EXP")
 
-            # Шанс выпадения предмета
             if random.random() < 0.3:
                 self.generate_mob_drop(mob["type"])
         else:
-            # Контратака моба
             mob_damage = max(1, mob_data["damage"] + self.mob_difficulty)
             self.player["hp"] -= mob_damage
             self.print_to_console(f"{mob_data['name']} hit you for {mob_damage} damage")
@@ -576,19 +533,16 @@ class AlbinaGame:
             slot = "shoes"
 
         if slot:
-            # Снимаем уже надетый предмет, если есть
             if self.player["equipped"][slot]:
                 old_item = self.player["equipped"][slot]
                 self.player["inventory"].append(old_item)
                 self.print_to_console(f"Removed {old_item['name']}")
 
-            # Надеваем новый предмет
             self.player["equipped"][slot] = item
             self.player["inventory"].pop(self.selected_item)
             self.selected_item = None
             self.print_to_console(f"You equipped {item['name']}")
 
-            # Применяем эффекты предмета
             self.apply_item_effects()
         else:
             self.print_to_console("This item cannot be equipped")
@@ -617,7 +571,6 @@ class AlbinaGame:
             self.print_to_console(f"{slot.capitalize()} slot is already empty")
 
     def apply_item_effects(self):
-        # Сбрасываем все эффекты
         self.player["inventory_capacity"] = 3
         self.player["kick_damage"] = 2
 
@@ -629,7 +582,6 @@ class AlbinaGame:
                     if effect == "capacity":
                         self.player["inventory_capacity"] = value
 
-        # Применяем эффекты от надетых предметов
         for slot, item in self.player["equipped"].items():
             if item:
                 item_data = self.item_types["clothes"][item["subtype"]]
@@ -638,13 +590,13 @@ class AlbinaGame:
                         if effect == "capacity":
                             self.player["inventory_capacity"] = value
                         elif effect == "sleep_rate":
-                            pass  # Обрабатывается в игровом цикле
+                            pass
                         elif effect == "hunger_rate":
-                            pass  # Обрабатывается в игровом цикле
+                            pass
                         elif effect == "snake_damage":
-                            pass  # Обрабатывается при получении урона
+                            pass
                         elif effect == "move_speed":
-                            pass  # Может влиять на скорость передвижения
+                            pass
 
     def use_item(self):
         if not hasattr(self, 'selected_item') or self.selected_item is None:
@@ -662,13 +614,11 @@ class AlbinaGame:
             self.player["inventory"].append(old_item)
             self.print_to_console(f"Removed {old_item['name']}")
 
-        # Надеваем новый предмет
         self.player["used"] = item
         self.player["inventory"].pop(self.selected_item)
         self.selected_item = None
         self.print_to_console(f"You equipped {item['name']}")
 
-        # Применяем эффекты предмета
         self.apply_item_effects()
 
     def save_game(self):
@@ -680,7 +630,6 @@ class AlbinaGame:
         if not os.path.exists(world_path):
             os.makedirs(world_path)
 
-        # Сохраняем данные мира
         with open(os.path.join(world_path, "server.alb"), "w") as f:
             json.dump({
                 "seed": self.world["seed"],
@@ -690,7 +639,6 @@ class AlbinaGame:
                 "discovered": self.world["discovered"]
             }, f)
 
-        # Сохраняем статистику игрока
         with open(os.path.join(world_path, "stat.alb"), "w") as f:
             json.dump({
                 "x": self.player["x"],
@@ -719,25 +667,20 @@ class AlbinaGame:
 
     def game_loop(self):
         if self.game_loaded:
-            # Обновляем состояние игрока
             self.player["hunger"] = min(100, self.player["hunger"] + 1)
             self.player["sleep"] = min(100, self.player["sleep"] + 0.5)
 
-            # Проверяем голод
             if self.player["hunger"] >= 100:
                 self.player["hp"] -= 5
                 self.print_to_console("You're starving! -5 HP")
 
-            # Проверяем сонливость
             if self.player["sleep"] >= 100:
                 self.player["hp"] -= 2
                 self.print_to_console("You're exhausted! -2 HP")
 
-            # Проверяем здоровье
             if self.player["hp"] <= 0:
                 self.game_over("You died from your wounds")
 
-            # Смена времени суток
             current_time = time.time()
             day_progress = (current_time - self.player["start_time"]) % self.day_length
             if day_progress < self.day_length * 0.4:
@@ -773,14 +716,12 @@ class AlbinaGame:
         """Применение эффектов от активных плагинов"""
         for plugin in self.plugins:
             if plugin.get("enabled", False):
-                # Применяем модификаторы предметов
                 if "items" in plugin:
                     for item_type, items in plugin["items"].items():
                         if item_type not in self.item_types:
                             self.item_types[item_type] = {}
                         self.item_types[item_type].update(items)
 
-                # Применяем модификаторы мобов
                 if "mobs" in plugin:
                     for mob_name, mob_data in plugin["mobs"].items():
                         self.mob_types[mob_name] = mob_data
@@ -826,15 +767,13 @@ class AlbinaGame:
 
     def generate_complex_maze(self):
         """Генерация более сложного лабиринта с использованием алгоритма recursive backtracking"""
-        width, height = 100, 100  # Размер лабиринта
-        maze = [[1 for _ in range(width)] for _ in range(height)]  # 1 = стена, 0 = проход
+        width, height = 100, 100
+        maze = [[1 for _ in range(width)] for _ in range(height)]
 
-        # Начальная позиция
         x, y = random.randint(0, width-1), random.randint(0, height-1)
         maze[y][x] = 0
         stack = [(x, y)]
 
-        # Направления движения
         directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
 
         while stack:
@@ -852,7 +791,6 @@ class AlbinaGame:
             else:
                 stack.pop()
 
-        # Сохраняем лабиринт в мире
         for y in range(height):
             for x in range(width):
                 pos_key = f"{x - width//2},{y - height//2}"
@@ -878,8 +816,7 @@ class AlbinaGame:
     def confirm_exit(self):
         """Подтверждение выхода из игры"""
         self.print_to_console("Are you sure you want to exit? 1: Yes, 2: No")
-        # В реальной реализации нужно ожидать ввода пользователя
-        # Для примера просто выходим
+
         self.quit_game()
 
     def quit_game(self):
@@ -892,8 +829,7 @@ class AlbinaGame:
     def stop_server(self):
         """Остановка сервера"""
         self.print_to_console("Stop server? Unsaved changes will be lost. 1: Yes, 2: No")
-        # В реальной реализации нужно ожидать ввода пользователя
-        # Для примера просто останавливаем
+
         self.server_running = False
         self.print_to_console("Server stopped")
 
@@ -905,11 +841,10 @@ class AlbinaGame:
 
     def run(self):
         """Основной цикл приложения"""
-        # Загружаем плагины при старте
+
         self.load_plugins()
         self.apply_plugin_effects()
 
-        # Запускаем GUI
         self.root.mainloop()
 
 if __name__ == "__main__":
