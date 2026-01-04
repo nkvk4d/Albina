@@ -1,12 +1,16 @@
+from logging import root
 import os
 import json
 import random
 import time
 import tkinter as tk
+from tkinter import ttk
 from tkinter import scrolledtext, messagebox
 import threading
 from datetime import datetime
 import hashlib
+from tkinter.font import Font
+from turtle import bgcolor
 
 class AlbinaGame:
     def __init__(self):
@@ -27,7 +31,7 @@ class AlbinaGame:
                 "ushanka": {"name": "Ushanka", "effect": {"sleep_rate": -0.2}, "rarity": 0.3},
                 "leather_jacket": {"name": "Leather Jacket", "effect": {"snake_damage": -0.2}, "rarity": 0.3},
                 "striped_pants": {"name": "Striped Pants", "effect": {"hunger_rate": -0.2}, "rarity": 0.3},
-                "croc_shoes": {"name": "Crocodile Shoes", "effect": {"move_speed": 0.1}, "rarity": 0.1}
+                "croc_shoes": {"name": "Crocodile Shoes", "effect": {"move_speed": 0.1}, "rarity": 0.1},
             },
             "food": {
                 "vodka": {"name": "Vodka", "hunger": -50, "rarity": 0.1},
@@ -70,6 +74,7 @@ class AlbinaGame:
                 "pants": None,
                 "shoes": None
             },
+            "used": None,
             "killed_mobs": {},
             "collected_items": [],
             "start_time": time.time(),
@@ -99,27 +104,29 @@ class AlbinaGame:
     def init_gui(self):
         # Создание основного окна
         self.root = tk.Tk()
+        self.root.configure(bg="#212121")
         self.root.title("Albina")
         self.root.geometry("800x600")
 
         # Статус бар
-        self.status_bar = tk.Label(self.root, text="", bd=1, relief=tk.SUNKEN, anchor=tk.W)
+        self.status_bar = tk.Label(self.root, text="", bd=1, relief=tk.SUNKEN, anchor=tk.W, bg="#212121", fg="#00ff00", font=("Consolas", 9, "bold"))
         self.status_bar.pack(fill=tk.X)
 
         # Консоль вывода
         self.console = scrolledtext.ScrolledText(self.root, state='disabled')
+        self.console.configure(bg="#212121", fg="#00ff00", insertbackground="#aeada7", font=("Consolas", 12, "bold"))
         self.console.pack(fill=tk.BOTH, expand=True)
 
         # Фрейм для ввода команд
-        self.input_frame = tk.Frame(self.root)
+        self.input_frame = tk.Frame(self.root, bg="#212121")
         self.input_frame.pack(fill=tk.X)
 
         # Метка ">"
-        self.prompt = tk.Label(self.input_frame, text=">")
+        self.prompt = tk.Label(self.input_frame, text=">", fg="#00ff00", bg="#212121")
         self.prompt.pack(side=tk.LEFT)
 
         # Поле ввода команд
-        self.command_entry = tk.Entry(self.input_frame)
+        self.command_entry = tk.Entry(self.input_frame, bg="#212121", fg="#00ff00", insertbackground="#aeada7", font=("Consolas", 12, "bold"))
         self.command_entry.pack(fill=tk.X, expand=True, side=tk.LEFT)
         self.command_entry.bind("<Return>", self.process_command)
 
@@ -212,6 +219,8 @@ class AlbinaGame:
                 self.equip_item()
             elif command.startswith("unset"):
                 self.unequip_item()
+            elif command == "use":
+                self.use_item()
             elif command == "plugin":
                 self.list_plugins()
             elif command == "exit":
@@ -612,6 +621,14 @@ class AlbinaGame:
         self.player["inventory_capacity"] = 3
         self.player["kick_damage"] = 2
 
+        item = self.player["used"]
+        if item:
+            item_data = self.item_types["special"][item["subtype"]]
+            if "effect" in item_data:
+                for effect, value in item_data["effect"].items():
+                    if effect == "capacity":
+                        self.player["inventory_capacity"] = value
+
         # Применяем эффекты от надетых предметов
         for slot, item in self.player["equipped"].items():
             if item:
@@ -628,6 +645,31 @@ class AlbinaGame:
                             pass  # Обрабатывается при получении урона
                         elif effect == "move_speed":
                             pass  # Может влиять на скорость передвижения
+
+    def use_item(self):
+        if not hasattr(self, 'selected_item') or self.selected_item is None:
+            self.print_to_console("No item selected")
+            return
+
+        item = self.player["inventory"][self.selected_item]
+
+        if item["type"] != "special":
+            self.print_to_console("You can only use special items")
+            return
+
+        if self.player["used"]:
+            old_item = self.player["used"]
+            self.player["inventory"].append(old_item)
+            self.print_to_console(f"Removed {old_item['name']}")
+
+        # Надеваем новый предмет
+        self.player["used"] = item
+        self.player["inventory"].pop(self.selected_item)
+        self.selected_item = None
+        self.print_to_console(f"You equipped {item['name']}")
+
+        # Применяем эффекты предмета
+        self.apply_item_effects()
 
     def save_game(self):
         if not self.game_loaded:
