@@ -45,7 +45,7 @@ class CommandHandler:
 
 class AlbinaGame:
     def __init__(self):
-        self.version = "Albina V1"
+        self.version = "Albina V1.1"
         self.running = True
         self.server_running = False
         self.game_loaded = False
@@ -111,7 +111,7 @@ class AlbinaGame:
         }
 
         self.world = {
-            "seed": "",
+            "seed": None,
             "layout": {},
             "items": [],
             "mobs": [],
@@ -122,12 +122,13 @@ class AlbinaGame:
         commands = {
             ("worlds", State.MENU): self.worlds_list,
             ("load", State.MENU): self.load_command,
-            ("new", State.MENU): self.new_command,
+            ("new", State.MENU): self.new_world,
             ("exit", State.MENU): self.exit_command,
             ("help", State.MENU): self.help_command,
             ("credits", State.MENU): self.credits_command,
             ("stop", State.MENU): self.stop_command,
             ("start", State.MENU): self.start_command,
+            ("exit", State.MENU): self.exit_command,  # noqa: F601
 
             ("up", State.GAME): self.up_command,
             ("down", State.GAME): self.down_command,
@@ -144,9 +145,10 @@ class AlbinaGame:
             ("equip", State.GAME): self.equip_item,
             ("unequip", State.GAME): self.unequip_item,
             ("use", State.GAME): self.use_item,
+            ("save", State.GAME): self.save_game,
             ("kill", State.GAME): self.kill_command,
             ("plugin", State.GAME): self.list_plugins,
-            ("exit", State.GAME): self.confirm_exit
+            ("exit", State.GAME): self.exit_game_mode
         }
 
         self.command_handler = CommandHandler(commands)
@@ -243,8 +245,8 @@ class AlbinaGame:
         self.time_label.config(text=time_text)
 
         self.inventory_list.delete(0, tk.END)
-        for item in self.player["inventory"]:
-            self.inventory_list.insert(tk.END, item["name"])
+        for index, item in enumerate(self.player["inventory"], 1):
+            self.inventory_list.insert(tk.END, f"{index}.{item['name']}")
 
         self.root.after(1000, self.update_right_panel)
 
@@ -344,7 +346,7 @@ class AlbinaGame:
 
         if os.path.exists(server_file):
             try:
-                with open(server_file, "r") as f:
+                with open(server_file, 'r', encoding="utf-8") as f:
                     world_data = json.load(f)
                     self.world.update(world_data)
 
@@ -355,8 +357,8 @@ class AlbinaGame:
                     self.game_loaded = True
 
                     if os.path.exists(stat_file):
-                        with open(stat_file, "r") as f:
-                            player_data = json.load(f)
+                        with open(stat_file, "r", encoding="utf-8") as f:
+                            player_data = json.load(f, parse_int=None)
                             self.player.update(player_data)
 
                     self.print_to_console(f"World {world_name} loaded")
@@ -365,7 +367,7 @@ class AlbinaGame:
                     if abs(self.player["x"]) > 50000 or abs(self.player["y"]) > 50000:
                         self.game_over("You saw the light and came out. This is the end")
             except Exception as e:
-                self.print_to_console(f"Error loading world data: {str(e)}")
+                self.print_to_console(f"Error loading world data: {e}")
         else:
             self.print_to_console("No world data found")
 
@@ -400,7 +402,7 @@ class AlbinaGame:
                     "hp": self.mob_types[mob_type]["hp"]
                 })
 
-    def new_command(self, args: list[str]):
+    def new_world(self, args: list[str]):
         name = args[0]
 
         if not os.path.exists("world"):
@@ -409,10 +411,7 @@ class AlbinaGame:
         os.mkdir(f"world/{name}")
 
         with open(f"world/{name}/stat.alb", 'w', encoding="utf-8") as file:
-            time_m = time.time()
-
-            data = f"""
-            {{
+            data = {
                 "x": 0,
                 "y": 0,
                 "hp": 100,
@@ -422,37 +421,35 @@ class AlbinaGame:
                 "day": 1,
                 "time": "morning",
                 "inventory": [],
-                "equipped": {{
+                "equipped": {
                     "hat": None,
                     "jacket": None,
                     "pants": None,
                     "shoes": None
-                }},
+                },
                 "used": None,
-                "killed_mobs": {{}},
+                "killed_mobs": {},
                 "collected_items": [],
-                "start_time": {time_m},
+                "start_time": time.time(),
                 "inventory_capacity": 3,
                 "kick_damage": 2
-            }}
-            """
+            }
 
-            file.write(data)
+            json.dump(data, file)
 
         with open(f"world/{name}/server.alb", 'w', encoding="utf-8") as file:
             seed = random.randint(0, 99999999)
 
-            data = f"""
-            {{
-              "seed": "{seed}",
-              "layout": {{}},
-              "items": [],
-              "mobs": [],
-              "discovered": {{}}
-            }}
-            """
+            data = {
+                "seed": seed,
+                "layout": {},
+                "items": [],
+                "mobs": [],
+                "discovered": {}
+            }
 
-            file.write(data)
+            json.dump(data, file)
+
         self.print_to_console(f"created world \"{name}\"")
 
     def up_command(self, _args):
@@ -778,7 +775,7 @@ class AlbinaGame:
 
         self.apply_item_effects()
 
-    def save_game(self):
+    def save_game(self, _args):
         if self._state != State.GAME:
             self.print_to_console("No world loaded to save")
             return
@@ -788,36 +785,15 @@ class AlbinaGame:
             os.makedirs(world_path)
 
         with open(os.path.join(world_path, "server.alb"), "w") as f:
-            json.dump({
-                "seed": self.world["seed"],
-                "layout": self.world["layout"],
-                "items": self.world["items"],
-                "mobs": self.world["mobs"],
-                "discovered": self.world["discovered"],
-                "time": self.world["time"]
-            }, f)
+            json.dump(self.world, f)
 
         with open(os.path.join(world_path, "stat.alb"), "w") as f:
-            json.dump({
-                "x": self.player["x"],
-                "y": self.player["y"],
-                "hp": self.player["hp"],
-                "sleep": self.player["sleep"],
-                "hunger": self.player["hunger"],
-                "exp": self.player["exp"],
-                "day": self.player["day"],
-                "time": self.player["time"],
-                "inventory": self.player["inventory"],
-                "equipped": self.player["equipped"],
-                "killed_mobs": self.player["killed_mobs"],
-                "collected_items": self.player["collected_items"],
-                "inventory_capacity": self.player["inventory_capacity"],
-                "kick_damage": self.player["kick_damage"]
-            }, f)
+            json.dump(self.player, f)
 
         self.print_to_console("Game saved")
 
     def game_over(self, message):
+        self.save_game(None)
         self.print_to_console(f"Game Over: {message}")
         self.game_loaded = False
         self._state = State.MENU
@@ -976,6 +952,13 @@ class AlbinaGame:
         })
         self.print_to_console(f"You got: {item_data['name']}")
 
+    def exit_game_mode(self, _args):
+        self.save_game(None)
+
+        self.game_loaded = False
+        self.current_world = None
+        self._state = State.MENU
+
     def confirm_exit(self, _args):
         """Подтверждение выхода из игры"""
         self.print_to_console("Are you sure you want to exit? 1: Yes, 2: No")
@@ -985,7 +968,7 @@ class AlbinaGame:
     def exit_command(self, _args):
         """Выход из игры"""
         if self.game_loaded:
-            self.save_game()
+            self.save_game(None)
         self.running = False
         self.root.destroy()
 
@@ -1000,7 +983,6 @@ class AlbinaGame:
         """Запуск сервера"""
         if not self.server_running:
             self.server_running = True
-            self.print_to_console("Local server started")
 
     def run(self):
         """Основной цикл приложения"""

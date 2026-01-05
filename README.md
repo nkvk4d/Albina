@@ -9,3 +9,34 @@ RU:
 
 Plugin ideas
 ![plugin ideas](./data/pluginsAPI.png)
+
+## Json structure
+#### server.alb
+- seed: int
+- layout
+- items
+- mods
+- discovered
+- time: float
+#### stat.alb
+- x: int
+- y: int
+- hp: int
+- sleep: float
+- hunger: float
+- exp: int
+- day: int
+- time
+- inventory
+- equipped: {
+  - hat 
+  - jacket
+  - pants
+  - shoes
+}
+- used
+- killed_mobs
+- collected_items
+- start_time: float
+- inventory_capacity: int
+- kick_damage: int
