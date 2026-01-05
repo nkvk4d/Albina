@@ -50,7 +50,7 @@ class AlbinaGame:
         self.server_running = False
         self.game_loaded = False
         self.current_world = None
-        self.day_length = 60
+        self.day_length = 300
         self.selected_item = None
         self.plugins = []
         self.mob_difficulty = 0
@@ -134,6 +134,7 @@ class AlbinaGame:
             ("left", State.GAME): self.left_command,
             ("right", State.GAME): self.right_command,
             ("inventory", State.GAME): self.show_inventory,
+            ("give", State.GAME): self.give_item,
             ("select", State.GAME): self.select_item,
             ("kick", State.GAME): self.kick,
             ("eat", State.GAME): self.eat_item,
@@ -161,16 +162,27 @@ class AlbinaGame:
         self.root = tk.Tk()
         self.root.configure(bg="#212121")
         self.root.title("Albina")
-        self.root.geometry("800x600")
+        self.root.geometry("1000x600")
 
-        self.status_bar = tk.Label(self.root, text="", bd=1, relief=tk.SUNKEN, anchor=tk.W, bg="#212121", fg="#00ff00", font=("Consolas", 9, "bold"))
+        self.main_frame = tk.Frame(self.root, bg="#212121")
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
+
+        self.left_panel = tk.Frame(self.main_frame, bg="#212121", width=700)
+        self.left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.left_panel.pack_propagate(False)
+
+        self.right_panel = tk.Frame(self.main_frame, bg="#1a1a1a", width=300)
+        self.right_panel.pack(side=tk.RIGHT, fill=tk.BOTH)
+        self.right_panel.pack_propagate(False)
+
+        self.status_bar = tk.Label(self.left_panel, text="", bd=1, relief=tk.SUNKEN, anchor=tk.W, bg="#212121", fg="#00ff00", font=("Consolas", 9, "bold"))
         self.status_bar.pack(fill=tk.X)
 
-        self.console = scrolledtext.ScrolledText(self.root, state='disabled')
+        self.console = scrolledtext.ScrolledText(self.left_panel, state='disabled')
         self.console.configure(bg="#212121", fg="#00ff00", insertbackground="#aeada7", font=("Consolas", 12, "bold"))
         self.console.pack(fill=tk.BOTH, expand=True)
 
-        self.input_frame = tk.Frame(self.root, bg="#212121")
+        self.input_frame = tk.Frame(self.left_panel, bg="#212121")
         self.input_frame.pack(fill=tk.X)
 
         self.prompt = tk.Label(self.input_frame, text=">", fg="#00ff00", bg="#212121")
@@ -180,6 +192,7 @@ class AlbinaGame:
         self.command_entry.pack(fill=tk.X, expand=True, side=tk.LEFT)
         self.command_entry.bind("<Return>", self.command_handle)
 
+        self.init_right_panel()
         self.print_to_console(self.version)
         self.root.after(2000, self.check_server)
 
@@ -205,6 +218,56 @@ class AlbinaGame:
 
     def credits_command(self, _args):
         self.print_to_console(self.version)
+
+    def init_right_panel(self):
+        self.time_label = tk.Label(self.right_panel, text="", fg="#00ff00", bg="#1a1a1a", font=("Consolas", 14, "bold"))
+        self.time_label.pack(pady=10)
+
+        self.inventory_label = tk.Label(self.right_panel, text="INVENTORY", fg="#00ff00", bg="#1a1a1a", font=("Consolas", 12, "bold"))
+        self.inventory_label.pack(pady=5)
+
+        self.inventory_list = tk.Listbox(self.right_panel, bg="#1a1a1a", fg="#00ff00", font=("Consolas", 10), height=10, relief=tk.FLAT, bd=0)
+        self.inventory_list.pack(fill=tk.BOTH, expand=True, padx=10)
+
+        self.compass_label = tk.Label(self.right_panel, text="COMPASS", fg="#00ff00", bg="#1a1a1a", font=("Consolas", 12, "bold"))
+        self.compass_label.pack(pady=5)
+
+        self.compass_canvas = tk.Canvas(self.right_panel, width=100, height=100, bg="#1a1a1a", highlightthickness=0)
+        self.compass_canvas.pack(pady=10)
+
+        self.draw_compass("N")
+        self.update_right_panel()
+
+    def update_right_panel(self):
+        time_text = f"Day: {self.player['day']}\nTime: {self.player['time']}"
+        self.time_label.config(text=time_text)
+
+        self.inventory_list.delete(0, tk.END)
+        for item in self.player["inventory"]:
+            self.inventory_list.insert(tk.END, item["name"])
+
+        self.root.after(1000, self.update_right_panel)
+
+    def draw_compass(self, direction):
+        self.compass_canvas.delete("all")
+
+        center_x, center_y = 50, 50
+        radius = 40
+
+        self.compass_canvas.create_oval(center_x-radius, center_y-radius, center_x+radius, center_y+radius, outline="#00ff00", width=2)
+
+        directions = {
+            "N": (0, -30, "N"),
+            "E": (30, 0, "E"),
+            "S": (0, 30, "S"),
+            "W": (-30, 0, "W")
+        }
+
+        for key, (dx, dy, text) in directions.items():
+            x = center_x + dx
+            y = center_y + dy
+            color = "#00ff00" if key == direction else "#555555"
+            self.compass_canvas.create_text(x, y, text=text, fill=color, font=("Consolas", 10, "bold"))
 
     def check_server(self):
         if not os.path.exists("server"):
@@ -427,6 +490,15 @@ class AlbinaGame:
                 self.mob_difficulty += 1
                 self.print_to_console("You feel the darkness getting deeper...")
 
+            if direction == "up":
+                self.draw_compass("N")
+            elif direction == "right":
+                self.draw_compass("E")
+            elif direction == "down":
+                self.draw_compass("S")
+            elif direction == "left":
+                self.draw_compass("W")
+
     def check_wall_collision(self):
         pos_key = f"{self.player['x']},{self.player['y']}"
 
@@ -530,7 +602,6 @@ class AlbinaGame:
         self.print_to_console(f"Day {self.player['day']} begins")
 
     def ping(self, _args):
-        # Проверка, есть ли у игрока пинг-понг
         has_ping = any(item["subtype"] == "pingpong" for item in self.player["inventory"])
 
         if has_ping:
@@ -668,7 +739,7 @@ class AlbinaGame:
                     if effect == "capacity":
                         self.player["inventory_capacity"] = value
 
-        for slot, item in self.player["equipped"].items():
+        for _slot, item in self.player["equipped"].items():
             if item:
                 item_data = self.item_types["clothes"][item["subtype"]]
                 if "effect" in item_data:
@@ -708,7 +779,7 @@ class AlbinaGame:
         self.apply_item_effects()
 
     def save_game(self):
-        if not self.game_loaded:
+        if self._state != State.GAME:
             self.print_to_console("No world loaded to save")
             return
 
@@ -888,7 +959,7 @@ class AlbinaGame:
                 pos_key = f"{x - width//2},{y - height//2}"
                 self.world["discovered"][pos_key] = {"wall": maze[y][x] == 1}
 
-    def give_item(self):
+    def give_item(self, _args):
         """Команда give - получить случайный предмет (для тестирования)"""
         if len(self.player["inventory"]) >= self.player["inventory_capacity"]:
             self.print_to_console("Inventory full!")
