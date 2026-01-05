@@ -144,7 +144,58 @@ class AlbinaGame:
                      f"EXP: {self.player['exp']}"
         self.status_bar.config(text=status_text)
         self.root.after(1000, self.update_status_bar)
+        
         def init_right_panel(self):
+        self.time_label = tk.Label(self.right_panel, text="", fg="#00ff00", bg="#1a1a1a", font=("Consolas", 14, "bold"))
+        self.time_label.pack(pady=10)
+
+        self.inventory_label = tk.Label(self.right_panel, text="INVENTORY", fg="#00ff00", bg="#1a1a1a", font=("Consolas", 12, "bold"))
+        self.inventory_label.pack(pady=5)
+
+        self.inventory_list = tk.Listbox(self.right_panel, bg="#1a1a1a", fg="#00ff00", font=("Consolas", 10), height=10, relief=tk.FLAT, bd=0)
+        self.inventory_list.pack(fill=tk.BOTH, expand=True, padx=10)
+
+        self.compass_label = tk.Label(self.right_panel, text="COMPASS", fg="#00ff00", bg="#1a1a1a", font=("Consolas", 12, "bold"))
+        self.compass_label.pack(pady=5)
+
+        self.compass_canvas = tk.Canvas(self.right_panel, width=100, height=100, bg="#1a1a1a", highlightthickness=0)
+        self.compass_canvas.pack(pady=10)
+
+        self.draw_compass("N")
+        self.update_right_panel()
+
+    def update_right_panel(self):
+        time_text = f"Day: {self.player['day']}\nTime: {self.player['time']}"
+        self.time_label.config(text=time_text)
+
+        self.inventory_list.delete(0, tk.END)
+        for item in self.player["inventory"]:
+            self.inventory_list.insert(tk.END, item["name"])
+
+        self.root.after(1000, self.update_right_panel)
+
+    def draw_compass(self, direction):
+        self.compass_canvas.delete("all")
+        
+        center_x, center_y = 50, 50
+        radius = 40
+        
+        self.compass_canvas.create_oval(center_x-radius, center_y-radius, center_x+radius, center_y+radius, outline="#00ff00", width=2)
+        
+        directions = {
+            "N": (0, -30, "N"),
+            "E": (30, 0, "E"),
+            "S": (0, 30, "S"),
+            "W": (-30, 0, "W")
+        }
+        
+        for key, (dx, dy, text) in directions.items():
+            x = center_x + dx
+            y = center_y + dy
+            color = "#00ff00" if key == direction else "#555555"
+            self.compass_canvas.create_text(x, y, text=text, fill=color, font=("Consolas", 10, "bold"))
+            
+    def init_right_panel(self):
         self.time_label = tk.Label(self.right_panel, text="", fg="#00ff00", bg="#1a1a1a", font=("Consolas", 14, "bold"))
         self.time_label.pack(pady=10)
 
