@@ -120,6 +120,7 @@ class AlbinaGame:
         }
 
         commands = {
+            ("worlds", State.MENU): self.worlds_list,
             ("load", State.MENU): self.load_command,
             ("new", State.MENU): self.new_command,
             ("exit", State.MENU): self.exit_command,
@@ -233,27 +234,41 @@ class AlbinaGame:
         if traceback:
             self.print_to_console(traceback)
 
+    def worlds(self) -> list[str] | None:
+        if not os.path.exists("world"):
+            os.makedirs("world")
+            self.print_to_console("Created worlds directory")
+            return None
+
+        worlds = [d for d in os.listdir("world") if os.path.isdir(os.path.join("world", d))]
+
+        if worlds:
+            return worlds
+        else:
+            return None
+
+    def worlds_list(self, _args):
+        worlds = self.worlds()
+
+        if worlds:
+            self.print_to_console("Available worlds:")
+            for i, world in enumerate(worlds, 1):
+                self.print_to_console(f"{i}. {world}")
+
+            self.print_to_console("type 'load <index>' to load world")
+        else:
+            self.print_to_console("No available worlds")
+            self.print_to_console("type 'new <name>' to create new world")
+
     def load_command(self, args: list[str]):
         index = int(args[0])
 
-        if not os.path.exists("world"):
-            os.makedirs("world")
-            self.print_to_console("Created world directory")
-            self.print_to_console("No worlds available")
-            return
+        worlds = self.worlds()
 
-        worlds = [d for d in os.listdir("world") if os.path.isdir(os.path.join("world", d))]
-        if not worlds:
-            self.print_to_console("No worlds available")
-            return
-
-        self.print_to_console("Available worlds:")
-        for i, world in enumerate(worlds, 1):
-            self.print_to_console(f"{i}. {world}")
-
-        self.print_to_console("Enter world number to load:")
-
-        self.load_specific_world(worlds[index - 1])
+        if worlds:
+            self.load_specific_world(worlds[index - 1])
+        else:
+            self.print_to_console("type 'new <name>' to create new world")
 
     def load_specific_world(self, world_name):
         world_path = os.path.join("world", world_name)
@@ -454,7 +469,7 @@ class AlbinaGame:
             mob_data = self.mob_types[mob["type"]]
             self.print_to_console(f"You encountered a {mob_data['name']}! Use 'kick' to fight")
 
-    def show_inventory(self):
+    def show_inventory(self, _args):
         if not self.player["inventory"]:
             self.print_to_console("Inventory is empty")
             return
@@ -464,14 +479,14 @@ class AlbinaGame:
             self.print_to_console(f"{i}. {item['name']}")
         self.print_to_console("Use 'select <number>' to choose item")
 
-    def select_item(self, command):
+    def select_item(self, args: list[str]):
         try:
-            parts = command.split()
-            if len(parts) < 2:
+
+            if len(args) < 1:
                 self.print_to_console("Usage: select <item_number>")
                 return
 
-            item_num = int(parts[1]) - 1
+            item_num = int(args[0]) - 1
             if 0 <= item_num < len(self.player["inventory"]):
                 self.selected_item = item_num
                 self.print_to_console(f"Selected {self.player['inventory'][item_num]['name']}")
@@ -480,7 +495,7 @@ class AlbinaGame:
         except ValueError:
             self.print_to_console("Invalid item number")
 
-    def eat_item(self):
+    def eat_item(self, _args):
         if not hasattr(self, 'selected_item') or self.selected_item is None:
             self.print_to_console("No item selected")
             return
@@ -497,7 +512,7 @@ class AlbinaGame:
         self.player["inventory"].pop(self.selected_item)
         self.selected_item = None
 
-    def sleep(self):
+    def sleep(self, _args):
         if self.player["time"] == "night":
             self.print_to_console("You're already sleeping")
             return
@@ -514,7 +529,7 @@ class AlbinaGame:
         self.print_to_console("You woke up refreshed")
         self.print_to_console(f"Day {self.player['day']} begins")
 
-    def ping(self):
+    def ping(self, _args):
         # Проверка, есть ли у игрока пинг-понг
         has_ping = any(item["subtype"] == "pingpong" for item in self.player["inventory"])
 
@@ -523,7 +538,7 @@ class AlbinaGame:
         else:
             self.print_to_console("You need a ping pong ball for that")
 
-    def kick(self):
+    def kick(self, _args):
         pos_mobs = [mob for mob in self.world["mobs"]
                    if mob["x"] == self.player["x"] and mob["y"] == self.player["y"]]
 
@@ -575,7 +590,7 @@ class AlbinaGame:
             self.player["inventory"].append(item)
             self.print_to_console(f"You got {item['name']} from the corpse")
 
-    def show_equipped(self):
+    def show_equipped(self, _args):
         self.print_to_console("Equipped items:")
         for slot, item in self.player["equipped"].items():
             if item:
@@ -583,7 +598,7 @@ class AlbinaGame:
             else:
                 self.print_to_console(f"{slot.capitalize()}: Empty")
 
-    def equip_item(self):
+    def equip_item(self, _args):
         if not hasattr(self, 'selected_item') or self.selected_item is None:
             self.print_to_console("No item selected")
             return
@@ -669,7 +684,7 @@ class AlbinaGame:
                         elif effect == "move_speed":
                             pass
 
-    def use_item(self):
+    def use_item(self, _args):
         if not hasattr(self, 'selected_item') or self.selected_item is None:
             self.print_to_console("No item selected")
             return
@@ -804,7 +819,7 @@ class AlbinaGame:
                     for mob_name, mob_data in plugin["mobs"].items():
                         self.mob_types[mob_name] = mob_data
 
-    def list_plugins(self):
+    def list_plugins(self, _args):
         """Показать список всех плагинов"""
         if not self.plugins:
             self.print_to_console("No plugins available")
@@ -890,7 +905,7 @@ class AlbinaGame:
         })
         self.print_to_console(f"You got: {item_data['name']}")
 
-    def confirm_exit(self):
+    def confirm_exit(self, _args):
         """Подтверждение выхода из игры"""
         self.print_to_console("Are you sure you want to exit? 1: Yes, 2: No")
 
