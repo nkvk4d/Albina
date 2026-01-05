@@ -1,3 +1,6 @@
 build
 dist
 albina.spec
+world
+__pycache__
+server
