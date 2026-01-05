@@ -1,51 +1,20 @@
-from abc import ABC, abstractmethod
-from enum import Enum
+from logging import root
 import os
 import json
 import random
 import time
 import tkinter as tk
-from tkinter import scrolledtext
+from tkinter import ttk
+from tkinter import scrolledtext, messagebox
+import threading
+from datetime import datetime
 import hashlib
-from typing import Callable
-
-class State(Enum):
-    MENU = 0
-    GAME = 1
-
-class AlbinaCommand(ABC):
-    @abstractmethod
-    def __call__(self, args):
-        pass
-
-class CommandHandler:
-    def __init__(self, commands: dict[tuple[str, State], Callable]):
-        self._commands: dict[tuple[str, State], Callable] = dict()
-
-        for item, callback in commands.items():
-            verb, state = item
-            if callable(callback):
-                self._commands[(verb.lower(), state)] = callback
-            else:
-                raise TypeError(f"Handler for {verb} isn't callable")
-
-    def process_command(self, command: str, state: State):
-        blocks = command.strip().lower().split()
-
-        args = blocks[1:]
-
-        first = blocks[0].lower()
-
-        func = self._commands.get((first, state))
-
-        if func:
-            func(args)
-        else:
-            return f"Unknown command '{first}'"
+from tkinter.font import Font
+from turtle import bgcolor
 
 class AlbinaGame:
     def __init__(self):
-        self.version = "Albina V1"
+        self.version = "Albina V1.1"
         self.running = True
         self.server_running = False
         self.game_loaded = False
@@ -54,8 +23,6 @@ class AlbinaGame:
         self.selected_item = None
         self.plugins = []
         self.mob_difficulty = 0
-        self._state = State.MENU
-        self.time = time.time()
 
         self.item_types = {
             "clothes": {
@@ -106,6 +73,7 @@ class AlbinaGame:
             "used": None,
             "killed_mobs": {},
             "collected_items": [],
+            "start_time": time.time(),
             "inventory_capacity": 3,
             "kick_damage": 2
         }
@@ -115,8 +83,7 @@ class AlbinaGame:
             "layout": {},
             "items": [],
             "mobs": [],
-            "discovered": {},
-            "time": 0.0
+            "discovered": {}
         }
 
         commands = {
@@ -152,7 +119,7 @@ class AlbinaGame:
 
         self.init_gui()
 
-        self.start_command(None)
+        self.start_server()
 
         self.game_loop()
         self.update_status_bar()
@@ -161,16 +128,27 @@ class AlbinaGame:
         self.root = tk.Tk()
         self.root.configure(bg="#212121")
         self.root.title("Albina")
-        self.root.geometry("800x600")
+        self.root.geometry("1000x600")
 
-        self.status_bar = tk.Label(self.root, text="", bd=1, relief=tk.SUNKEN, anchor=tk.W, bg="#212121", fg="#00ff00", font=("Consolas", 9, "bold"))
+        self.main_frame = tk.Frame(self.root, bg="#212121")
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
+
+        self.left_panel = tk.Frame(self.main_frame, bg="#212121", width=700)
+        self.left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.left_panel.pack_propagate(False)
+
+        self.right_panel = tk.Frame(self.main_frame, bg="#1a1a1a", width=300)
+        self.right_panel.pack(side=tk.RIGHT, fill=tk.BOTH)
+        self.right_panel.pack_propagate(False)
+
+        self.status_bar = tk.Label(self.left_panel, text="", bd=1, relief=tk.SUNKEN, anchor=tk.W, bg="#212121", fg="#00ff00", font=("Consolas", 9, "bold"))
         self.status_bar.pack(fill=tk.X)
 
-        self.console = scrolledtext.ScrolledText(self.root, state='disabled')
+        self.console = scrolledtext.ScrolledText(self.left_panel, state='disabled')
         self.console.configure(bg="#212121", fg="#00ff00", insertbackground="#aeada7", font=("Consolas", 12, "bold"))
         self.console.pack(fill=tk.BOTH, expand=True)
 
-        self.input_frame = tk.Frame(self.root, bg="#212121")
+        self.input_frame = tk.Frame(self.left_panel, bg="#212121")
         self.input_frame.pack(fill=tk.X)
 
         self.prompt = tk.Label(self.input_frame, text=">", fg="#00ff00", bg="#212121")
@@ -178,8 +156,9 @@ class AlbinaGame:
 
         self.command_entry = tk.Entry(self.input_frame, bg="#212121", fg="#00ff00", insertbackground="#aeada7", font=("Consolas", 12, "bold"))
         self.command_entry.pack(fill=tk.X, expand=True, side=tk.LEFT)
-        self.command_entry.bind("<Return>", self.command_handle)
+        self.command_entry.bind("<Return>", self.process_command)
 
+        self.init_right_panel()
         self.print_to_console(self.version)
         self.root.after(2000, self.check_server)
 
@@ -196,15 +175,106 @@ class AlbinaGame:
                      f"EXP: {self.player['exp']}"
         self.status_bar.config(text=status_text)
         self.root.after(1000, self.update_status_bar)
+        
+        def init_right_panel(self):
+        self.time_label = tk.Label(self.right_panel, text="", fg="#00ff00", bg="#1a1a1a", font=("Consolas", 14, "bold"))
+        self.time_label.pack(pady=10)
 
-    def kill_command(self, _args):
-        self.game_over("You committed suicide")
+        self.inventory_label = tk.Label(self.right_panel, text="INVENTORY", fg="#00ff00", bg="#1a1a1a", font=("Consolas", 12, "bold"))
+        self.inventory_label.pack(pady=5)
 
-    def help_command(self, _args):
-        self.print_to_console("Albina says: no one will help you")
+        self.inventory_list = tk.Listbox(self.right_panel, bg="#1a1a1a", fg="#00ff00", font=("Consolas", 10), height=10, relief=tk.FLAT, bd=0)
+        self.inventory_list.pack(fill=tk.BOTH, expand=True, padx=10)
 
-    def credits_command(self, _args):
-        self.print_to_console(self.version)
+        self.compass_label = tk.Label(self.right_panel, text="COMPASS", fg="#00ff00", bg="#1a1a1a", font=("Consolas", 12, "bold"))
+        self.compass_label.pack(pady=5)
+
+        self.compass_canvas = tk.Canvas(self.right_panel, width=100, height=100, bg="#1a1a1a", highlightthickness=0)
+        self.compass_canvas.pack(pady=10)
+
+        self.draw_compass("N")
+        self.update_right_panel()
+
+    def update_right_panel(self):
+        time_text = f"Day: {self.player['day']}\nTime: {self.player['time']}"
+        self.time_label.config(text=time_text)
+
+        self.inventory_list.delete(0, tk.END)
+        for item in self.player["inventory"]:
+            self.inventory_list.insert(tk.END, item["name"])
+
+        self.root.after(1000, self.update_right_panel)
+
+    def draw_compass(self, direction):
+        self.compass_canvas.delete("all")
+        
+        center_x, center_y = 50, 50
+        radius = 40
+        
+        self.compass_canvas.create_oval(center_x-radius, center_y-radius, center_x+radius, center_y+radius, outline="#00ff00", width=2)
+        
+        directions = {
+            "N": (0, -30, "N"),
+            "E": (30, 0, "E"),
+            "S": (0, 30, "S"),
+            "W": (-30, 0, "W")
+        }
+        
+        for key, (dx, dy, text) in directions.items():
+            x = center_x + dx
+            y = center_y + dy
+            color = "#00ff00" if key == direction else "#555555"
+            self.compass_canvas.create_text(x, y, text=text, fill=color, font=("Consolas", 10, "bold"))
+            
+    def init_right_panel(self):
+        self.time_label = tk.Label(self.right_panel, text="", fg="#00ff00", bg="#1a1a1a", font=("Consolas", 14, "bold"))
+        self.time_label.pack(pady=10)
+
+        self.inventory_label = tk.Label(self.right_panel, text="INVENTORY", fg="#00ff00", bg="#1a1a1a", font=("Consolas", 12, "bold"))
+        self.inventory_label.pack(pady=5)
+
+        self.inventory_list = tk.Listbox(self.right_panel, bg="#1a1a1a", fg="#00ff00", font=("Consolas", 10), height=10, relief=tk.FLAT, bd=0)
+        self.inventory_list.pack(fill=tk.BOTH, expand=True, padx=10)
+
+        self.compass_label = tk.Label(self.right_panel, text="COMPASS", fg="#00ff00", bg="#1a1a1a", font=("Consolas", 12, "bold"))
+        self.compass_label.pack(pady=5)
+
+        self.compass_canvas = tk.Canvas(self.right_panel, width=100, height=100, bg="#1a1a1a", highlightthickness=0)
+        self.compass_canvas.pack(pady=10)
+
+        self.draw_compass("N")
+        self.update_right_panel()
+
+    def update_right_panel(self):
+        time_text = f"Day: {self.player['day']}\nTime: {self.player['time']}"
+        self.time_label.config(text=time_text)
+
+        self.inventory_list.delete(0, tk.END)
+        for item in self.player["inventory"]:
+            self.inventory_list.insert(tk.END, item["name"])
+
+        self.root.after(1000, self.update_right_panel)
+
+    def draw_compass(self, direction):
+        self.compass_canvas.delete("all")
+        
+        center_x, center_y = 50, 50
+        radius = 40
+        
+        self.compass_canvas.create_oval(center_x-radius, center_y-radius, center_x+radius, center_y+radius, outline="#00ff00", width=2)
+        
+        directions = {
+            "N": (0, -30, "N"),
+            "E": (30, 0, "E"),
+            "S": (0, 30, "S"),
+            "W": (-30, 0, "W")
+        }
+        
+        for key, (dx, dy, text) in directions.items():
+            x = center_x + dx
+            y = center_y + dy
+            color = "#00ff00" if key == direction else "#555555"
+            self.compass_canvas.create_text(x, y, text=text, fill=color, font=("Consolas", 10, "bold"))
 
     def check_server(self):
         if not os.path.exists("server"):
@@ -224,8 +294,8 @@ class AlbinaGame:
         self.print_to_console("Local server started")
         self.print_to_console("Type 'load' to load a world")
 
-    def command_handle(self, _event):
-        command = self.command_entry.get()
+    def process_command(self, event):
+        command = self.command_entry.get().strip().lower()
         self.command_entry.delete(0, tk.END)
         self.print_to_console(f"> {command}")
 
@@ -288,8 +358,8 @@ class AlbinaGame:
                     self.generate_world()
 
                     self.current_world = world_name
-                    self._state = State.GAME
                     self.game_loaded = True
+                    self.update_right_panel()
 
                     if os.path.exists(stat_file):
                         with open(stat_file, "r") as f:
@@ -337,44 +407,11 @@ class AlbinaGame:
                     "hp": self.mob_types[mob_type]["hp"]
                 })
 
-    def new_command(self, args: list[str]):
-        name = args[0]
-
+    def create_world(self, name):
         if not os.path.exists("world"):
             os.makedirs("world")
 
         os.mkdir(f"world/{name}")
-
-        with open(f"world/{name}/stat.alb", 'w', encoding="utf-8") as file:
-            time_m = time.time()
-
-            data = f"""
-            {{
-                "x": 0,
-                "y": 0,
-                "hp": 100,
-                "sleep": 0,
-                "hunger": 0,
-                "exp": 0,
-                "day": 1,
-                "time": "morning",
-                "inventory": [],
-                "equipped": {{
-                    "hat": None,
-                    "jacket": None,
-                    "pants": None,
-                    "shoes": None
-                }},
-                "used": None,
-                "killed_mobs": {{}},
-                "collected_items": [],
-                "start_time": {time_m},
-                "inventory_capacity": 3,
-                "kick_damage": 2
-            }}
-            """
-
-            file.write(data)
 
         with open(f"world/{name}/server.alb", 'w', encoding="utf-8") as file:
             seed = random.randint(0, 99999999)
@@ -390,21 +427,9 @@ class AlbinaGame:
             """
 
             file.write(data)
-        self.print_to_console(f"created world \"{name}\"")
+            self.print_to_console(f"created world \"{name}\"")
 
-    def up_command(self, _args):
-        self.move_player("up")
-
-    def down_command(self, _args):
-        self.move_player("down")
-
-    def left_command(self, _args):
-        self.move_player("left")
-
-    def right_command(self, _args):
-        self.move_player("right")
-
-    def move_player(self, direction: str):
+    def move_player(self, direction):
         old_x, old_y = self.player["x"], self.player["y"]
 
         if direction == "up":
@@ -426,6 +451,15 @@ class AlbinaGame:
             if abs(self.player["x"]) > 100 + self.mob_difficulty * 100 or abs(self.player["y"]) > 100 + self.mob_difficulty * 100:
                 self.mob_difficulty += 1
                 self.print_to_console("You feel the darkness getting deeper...")
+            
+            if direction == "up":
+                self.draw_compass("N")
+            elif direction == "right":
+                self.draw_compass("E")
+            elif direction == "down":
+                self.draw_compass("S")
+            elif direction == "left":
+                self.draw_compass("W")
 
     def check_wall_collision(self):
         pos_key = f"{self.player['x']},{self.player['y']}"
@@ -511,6 +545,7 @@ class AlbinaGame:
 
         self.player["inventory"].pop(self.selected_item)
         self.selected_item = None
+        self.update_right_panel()
 
     def sleep(self, _args):
         if self.player["time"] == "night":
@@ -566,6 +601,7 @@ class AlbinaGame:
 
             if random.random() < 0.3:
                 self.generate_mob_drop(mob["type"])
+                self.update_right_panel()
         else:
             mob_damage = max(1, mob_data["damage"] + self.mob_difficulty)
             self.player["hp"] -= mob_damage
@@ -597,6 +633,7 @@ class AlbinaGame:
                 self.print_to_console(f"{slot.capitalize()}: {item['name']}")
             else:
                 self.print_to_console(f"{slot.capitalize()}: Empty")
+                self.update_right_panel()
 
     def equip_item(self, _args):
         if not hasattr(self, 'selected_item') or self.selected_item is None:
@@ -634,12 +671,13 @@ class AlbinaGame:
         else:
             self.print_to_console("This item cannot be equipped")
 
-    def unequip_item(self, args: list[str]):
-        if len(args) < 1:
+    def unequip_item(self):
+        parts = command.split()
+        if len(parts) < 2:
             self.print_to_console("Usage: unset <slot>")
             return
 
-        slot = args[0].lower()
+        slot = parts[1].lower()
         if slot not in self.player["equipped"]:
             self.print_to_console("Invalid slot. Available slots: hat, jacket, pants, shoes")
             return
@@ -651,6 +689,7 @@ class AlbinaGame:
                 self.player["equipped"][slot] = None
                 self.print_to_console(f"You unequipped {item['name']}")
                 self.apply_item_effects()
+                self.update_right_panel()
             else:
                 self.print_to_console("Inventory full! Can't unequip item")
         else:
@@ -706,13 +745,14 @@ class AlbinaGame:
         self.print_to_console(f"You equipped {item['name']}")
 
         self.apply_item_effects()
+        self.update_right_panel()
 
     def save_game(self):
         if not self.game_loaded:
             self.print_to_console("No world loaded to save")
             return
 
-        world_path = os.path.join("world", str(self.current_world))
+        world_path = os.path.join("world", self.current_world)
         if not os.path.exists(world_path):
             os.makedirs(world_path)
 
@@ -722,8 +762,7 @@ class AlbinaGame:
                 "layout": self.world["layout"],
                 "items": self.world["items"],
                 "mobs": self.world["mobs"],
-                "discovered": self.world["discovered"],
-                "time": self.world["time"]
+                "discovered": self.world["discovered"]
             }, f)
 
         with open(os.path.join(world_path, "stat.alb"), "w") as f:
@@ -749,7 +788,6 @@ class AlbinaGame:
     def game_over(self, message):
         self.print_to_console(f"Game Over: {message}")
         self.game_loaded = False
-        self._state = State.MENU
         self.current_world = None
         self.print_to_console("Type 'load' to start a new game")
 
@@ -769,12 +807,8 @@ class AlbinaGame:
             if self.player["hp"] <= 0:
                 self.game_over("You died from your wounds")
 
-
             current_time = time.time()
-            self.world["time"] += current_time - self.time
-            self.time = current_time
-
-            day_progress = self.world["time"] % self.day_length
+            day_progress = (current_time - self.player["start_time"]) % self.day_length
             if day_progress < self.day_length * 0.4:
                 self.player["time"] = "morning"
             elif day_progress < self.day_length * 0.7:
@@ -783,7 +817,6 @@ class AlbinaGame:
                 self.player["time"] = "evening"
             else:
                 self.player["time"] = "night"
-
 
         self.root.after(1000, self.game_loop)
 
@@ -851,6 +884,7 @@ class AlbinaGame:
                 else:
                     self.print_to_console("Invalid action. Use 'on' or 'off'")
 
+                # Перезагружаем эффекты плагинов
                 self.apply_plugin_effects()
             else:
                 self.print_to_console("Invalid plugin number")
@@ -892,6 +926,7 @@ class AlbinaGame:
         """Команда give - получить случайный предмет (для тестирования)"""
         if len(self.player["inventory"]) >= self.player["inventory_capacity"]:
             self.print_to_console("Inventory full!")
+            self.update_right_panel()
             return
 
         item_type = random.choice(list(self.item_types.keys()))
@@ -909,23 +944,23 @@ class AlbinaGame:
         """Подтверждение выхода из игры"""
         self.print_to_console("Are you sure you want to exit? 1: Yes, 2: No")
 
-        self.exit_command(None)
+        self.quit_game()
 
-    def exit_command(self, _args):
+    def quit_game(self):
         """Выход из игры"""
         if self.game_loaded:
             self.save_game()
         self.running = False
         self.root.destroy()
 
-    def stop_command(self, _args):
+    def stop_server(self):
         """Остановка сервера"""
         self.print_to_console("Stop server? Unsaved changes will be lost. 1: Yes, 2: No")
 
         self.server_running = False
         self.print_to_console("Server stopped")
 
-    def start_command(self, _args):
+    def start_server(self):
         """Запуск сервера"""
         if not self.server_running:
             self.server_running = True
