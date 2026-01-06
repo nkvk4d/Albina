@@ -1,4 +1,3 @@
-from abc import ABC, abstractmethod
 from enum import Enum
 import os
 import json
@@ -13,10 +12,8 @@ class State(Enum):
     MENU = 0
     GAME = 1
 
-class AlbinaCommand(ABC):
-    @abstractmethod
-    def __call__(self, args):
-        pass
+# class StandartUI(AlbinaUI):
+#     def __init__()
 
 class CommandHandler:
     def __init__(self, commands: dict[tuple[str, State], Callable]):
@@ -198,6 +195,18 @@ class AlbinaGame:
         self.print_to_console(self.version)
         self.root.after(2000, self.check_server)
 
+    def color_gui(self, color: str = "#00ff00", pos: str = "X"):
+        self.status_bar.configure(fg=color)
+        self.console.configure(fg=color)
+        self.prompt.configure(fg=color)
+        self.command_entry.configure(fg=color)
+        self.time_label.configure(fg=color)
+        self.inventory_label.configure(fg=color)
+        self.compass_label.configure(fg=color)
+        self.inventory_list.configure(fg=color)
+        self.compas_color = color
+        self.draw_compass(pos)
+
     def print_to_console(self, text):
         self.console.configure(state='normal')
         self.console.insert(tk.END, text + "\n")
@@ -222,6 +231,7 @@ class AlbinaGame:
         self.print_to_console(self.version)
 
     def init_right_panel(self):
+        self.compas_color = "#00ff00"
         self.time_label = tk.Label(self.right_panel, text="", fg="#00ff00", bg="#1a1a1a", font=("Consolas", 14, "bold"))
         self.time_label.pack(pady=10)
 
@@ -237,7 +247,7 @@ class AlbinaGame:
         self.compass_canvas = tk.Canvas(self.right_panel, width=100, height=100, bg="#1a1a1a", highlightthickness=0)
         self.compass_canvas.pack(pady=10)
 
-        self.draw_compass("N")
+        self.draw_compass("X")
         self.update_right_panel()
 
     def update_right_panel(self):
@@ -256,19 +266,20 @@ class AlbinaGame:
         center_x, center_y = 50, 50
         radius = 40
 
-        self.compass_canvas.create_oval(center_x-radius, center_y-radius, center_x+radius, center_y+radius, outline="#00ff00", width=2)
+        self.compass_canvas.create_oval(center_x-radius, center_y-radius, center_x+radius, center_y+radius, outline=self.compas_color, width=2)
 
         directions = {
             "N": (0, -30, "N"),
             "E": (30, 0, "E"),
             "S": (0, 30, "S"),
-            "W": (-30, 0, "W")
+            "W": (-30, 0, "W"),
+            "X": (0, 0, "Unknown")
         }
 
         for key, (dx, dy, text) in directions.items():
             x = center_x + dx
             y = center_y + dy
-            color = "#00ff00" if key == direction else "#555555"
+            color = self.compas_color if key == direction else "#555555"
             self.compass_canvas.create_text(x, y, text=text, fill=color, font=("Consolas", 10, "bold"))
 
     def check_server(self):
@@ -337,6 +348,7 @@ class AlbinaGame:
 
     def load_specific_world(self, world_name):
         world_path = os.path.join("world", world_name)
+
         if not os.path.exists(world_path):
             self.print_to_console(f"World {world_name} not found")
             return
@@ -350,57 +362,70 @@ class AlbinaGame:
                     world_data = json.load(f)
                     self.world.update(world_data)
 
-                    self.generate_world()
-
-                    self.current_world = world_name
-                    self._state = State.GAME
-                    self.game_loaded = True
-
-                    if os.path.exists(stat_file):
-                        with open(stat_file, "r", encoding="utf-8") as f:
-                            player_data = json.load(f, parse_int=None)
-                            self.player.update(player_data)
-
-                    self.print_to_console(f"World {world_name} loaded")
-                    self.print_to_console("Use commands: up, down, left, right to move")
-
-                    if abs(self.player["x"]) > 50000 or abs(self.player["y"]) > 50000:
-                        self.game_over("You saw the light and came out. This is the end")
             except Exception as e:
                 self.print_to_console(f"Error loading world data: {e}")
+                return
+
+            self.current_world = world_name
+            self._state = State.GAME
+            self.game_loaded = True
+
         else:
             self.print_to_console("No world data found")
+            return
+
+        if os.path.exists(stat_file):
+            try:
+                with open(stat_file, "r", encoding="utf-8") as f:
+                    player_data = json.load(f, parse_int=None)
+                    self.player.update(player_data)
+            except Exception as e:
+                self.print_to_console(f"Error loading world data: {e}")
+                return
+
+        else:
+            self.print_to_console("No world data found")
+            return
+
+        self.print_to_console(f"World {world_name} loaded")
+        self.print_to_console("Use commands: up, down, left, right to move")
+
+        if abs(self.player["x"]) > 50000 or abs(self.player["y"]) > 50000:
+            self.game_over("You saw the light and came out. This is the end")
 
     def generate_world(self):
-        if not self.world["seed"]:
-            self.world["seed"] = ''.join(random.choices('abcdefghijklmnopqrstuvwxyz0123456789', k=12))
+        data = dict()
 
-        random.seed(hashlib.sha256(self.world["seed"].encode()).hexdigest())
+        data["seed"] = ''.join(random.choices('abcdefghijklmnopqrstuvwxyz0123456789', k=12))
 
-        self.world["layout"] = {}
-        self.world["items"] = []
-        self.world["mobs"] = []
+        random.seed(hashlib.sha256(data["seed"].encode()).hexdigest())
 
-        for _ in range(random.randint(20, 50)):
+        data["layout"] = {}
+        data["items"] = []
+        data["mobs"] = []
+
+        for _ in range(random.randint(10000, 15000)):
             item_type = random.choice(list(self.item_types.keys()))
             item_subtype = random.choice(list(self.item_types[item_type].keys()))
             if random.random() < self.item_types[item_type][item_subtype]["rarity"]:
-                self.world["items"].append({
+                data["items"].append({
                     "type": item_type,
                     "subtype": item_subtype,
                     "x": random.randint(-100, 100),
                     "y": random.randint(-100, 100)
                 })
 
-        for _ in range(random.randint(10, 30)):
+        for _ in range(random.randint(5000, 10000)):
             mob_type = random.choice(list(self.mob_types.keys()))
             if random.random() < self.mob_types[mob_type]["rarity"]:
-                self.world["mobs"].append({
+                data["mobs"].append({
                     "type": mob_type,
                     "x": random.randint(-100, 100),
                     "y": random.randint(-100, 100),
                     "hp": self.mob_types[mob_type]["hp"]
                 })
+
+        return data
 
     def new_world(self, args: list[str]):
         name = args[0]
@@ -438,15 +463,7 @@ class AlbinaGame:
             json.dump(data, file)
 
         with open(f"world/{name}/server.alb", 'w', encoding="utf-8") as file:
-            seed = random.randint(0, 99999999)
-
-            data = {
-                "seed": seed,
-                "layout": {},
-                "items": [],
-                "mobs": [],
-                "discovered": {}
-            }
+            data = self.generate_world()
 
             json.dump(data, file)
 
@@ -465,6 +482,7 @@ class AlbinaGame:
         self.move_player("right")
 
     def move_player(self, direction: str):
+        self.player["sleep"] = min(100, self.player["sleep"] + 1)
         old_x, old_y = self.player["x"], self.player["y"]
 
         if direction == "up":
@@ -478,23 +496,26 @@ class AlbinaGame:
 
         if self.check_wall_collision():
             self.player["x"], self.player["y"] = old_x, old_y
+            self.color_gui("blue")
             self.print_to_console("Dead end")
         else:
             self.print_to_console(f"Moved {direction}")
-            self.check_position()
 
             if abs(self.player["x"]) > 100 + self.mob_difficulty * 100 or abs(self.player["y"]) > 100 + self.mob_difficulty * 100:
                 self.mob_difficulty += 1
                 self.print_to_console("You feel the darkness getting deeper...")
 
-            if direction == "up":
-                self.draw_compass("N")
-            elif direction == "right":
-                self.draw_compass("E")
-            elif direction == "down":
-                self.draw_compass("S")
-            elif direction == "left":
-                self.draw_compass("W")
+                pos = "X"
+                if direction == "up":
+                    pos = "N"
+                elif direction == "right":
+                    pos = "E"
+                elif direction == "down":
+                    pos = "S"
+                elif direction == "left":
+                    pos = "W"
+
+                self.check_position(pos)
 
     def check_wall_collision(self):
         pos_key = f"{self.player['x']},{self.player['y']}"
@@ -506,7 +527,7 @@ class AlbinaGame:
 
         return self.world["discovered"][pos_key]["wall"]
 
-    def check_position(self):
+    def check_position(self, pos: str):
         pos_items = [item for item in self.world["items"]
                     if item["x"] == self.player["x"] and item["y"] == self.player["y"]]
 
@@ -533,6 +554,11 @@ class AlbinaGame:
 
         pos_mobs = [mob for mob in self.world["mobs"]
                    if mob["x"] == self.player["x"] and mob["y"] == self.player["y"]]
+
+        if pos_mobs:
+            self.color_gui("red")
+        else:
+            self.root.after(1000, self.color_gui, "#00ff00", pos)
 
         for mob in pos_mobs:
             mob_data = self.mob_types[mob["type"]]
@@ -614,6 +640,7 @@ class AlbinaGame:
             self.print_to_console("Nothing to kick here")
             return
 
+        self.player["sleep"] = min(100, self.player["sleep"] + 5)
         mob = pos_mobs[0]
         mob_data = self.mob_types[mob["type"]]
 
@@ -625,6 +652,7 @@ class AlbinaGame:
             self.world["mobs"].remove(mob)
             self.player["exp"] += 5
             self.player["kick_damage"] += 1
+            self.color_gui()
 
             if mob["type"] not in self.player["killed_mobs"]:
                 self.player["killed_mobs"][mob["type"]] = 0
@@ -802,8 +830,8 @@ class AlbinaGame:
 
     def game_loop(self):
         if self.game_loaded:
-            self.player["hunger"] = min(100, self.player["hunger"] + 1)
-            self.player["sleep"] = min(100, self.player["sleep"] + 0.5)
+            self.player["hunger"] = min(100, self.player["hunger"] + 0.125)
+            self.player["sleep"] = min(100, round(self.player["sleep"] + 0.1, 2))
 
             if self.player["hunger"] >= 100:
                 self.player["hp"] -= 5
